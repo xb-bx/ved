@@ -46,6 +46,7 @@ foreign libc {
     tcgetattr :: proc (fd: c.int, termios: ^termios) -> c.int ---
     tcsetattr :: proc (fd: c.int, optional_actions: c.int, termios: ^termios) -> c.int ---
     signal :: proc(sig: c.int, handler: sighandler_t) -> sighandler_t ---
+    cfmakeraw :: proc(termios: ^termios) ---
 }
 STDIN_FILENO :: 0
 winsize :: struct {

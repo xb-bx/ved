@@ -8,18 +8,18 @@ Cursor :: struct {
     row: int,
 }
 Buffer :: struct {
-    data: []rune,
+    data: [dynamic]rune,
     lines: [dynamic]Line,
     file_name: string,
     cursor: Cursor,
     scroll_cursor: Cursor,
 }
-init_buffer :: proc(data: []rune, file_name: string) -> Buffer {
+init_buffer :: proc(data: [dynamic]rune, file_name: string) -> Buffer {
     lines := make([dynamic]Line)
     split_into_lines(data, &lines)
     return Buffer { data = data, lines = lines, file_name = file_name }
 }
-split_into_lines :: proc(data: []rune, lines: ^[dynamic]Line) {
+split_into_lines :: proc(data: [dynamic]rune, lines: ^[dynamic]Line) {
     clear(lines)
     append(lines, Line{})
     line := &lines[0]
@@ -70,4 +70,36 @@ buf_cursor_row :: proc(buf: ^Buffer, dir: int) {
         buf.scroll_cursor.col = (line.end - line.start) / 2
         buf.cursor.col = line.end - 1
     }
+}
+buf_insert :: proc(buf: ^Buffer, r: rune) {
+    line := buf.lines[buf.cursor.row]
+    line_len := line.end - line.start
+    buf.cursor.col = clamp(buf.cursor.col, 0, line_len - 1)
+    inject_at(&buf.data, line.start + buf.cursor.col, r) 
+    split_into_lines(buf.data, &buf.lines)
+    buf.cursor.col += 1
+}
+buf_remove :: proc(buf: ^Buffer) {
+    line := buf.lines[buf.cursor.row]
+    line_len := line.end - line.start
+    buf.cursor.col = clamp(buf.cursor.col, 0, line_len - 1)
+    if buf.cursor.col == 0 {
+        if buf.cursor.row == 0 {
+            return
+        } else {
+            prev_line := buf.lines[buf.cursor.row - 1]
+            prev_line_len := prev_line.end - prev_line.start
+            ordered_remove(&buf.data, line.start - 1) 
+            split_into_lines(buf.data, &buf.lines)
+            buf_cursor_row(buf, -1)
+            buf_cursor_col(buf, prev_line_len)
+        }
+
+    }
+    else {
+        buf.cursor.col = clamp(buf.cursor.col - 1, 0, line_len - 1)
+        ordered_remove(&buf.data, line.start + buf.cursor.col)
+        split_into_lines(buf.data, &buf.lines)
+    }
+
 }
