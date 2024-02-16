@@ -23,6 +23,12 @@ ved: Ved = {}
 set_cursor :: proc(col: int, row: int) {
     fmt.printf("\x1b[%i;%iH", row, col)
 }
+set_cursor_block :: proc() {
+    fmt.print("\x1b[2 q")
+}
+set_cursor_line :: proc() {
+    fmt.print("\x1b[6 q")
+}
 hide_cursor :: proc() {
     fmt.print("\x1b[?25l")
 }
@@ -174,6 +180,7 @@ main :: proc() {
                 case 'l':
                     buf_cursor_col(buffer, 1)
                 case 'i':
+                    set_cursor_line()
                     ved.mode = VedMode.Insert
                 case 'q':
                     tcsetattr(STDIN_FILENO, TCSANOW, &raw)
@@ -185,6 +192,7 @@ main :: proc() {
                 switch k.key_rune {
                 // ESCAPE
                 case '\x1b':
+                    set_cursor_block()
                     ved.mode = VedMode.Normal
                     break
                 // BACKSPACE
