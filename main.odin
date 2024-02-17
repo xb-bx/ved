@@ -136,14 +136,11 @@ main :: proc() {
     if !ok {
         os.exit(1)
     }
-    file_str := (strings.clone_from_bytes(file))
-    file_runes_slice := utf8.string_to_runes(file_str)
-    file_runes := make_dynamic_array_len_cap([dynamic]rune, 0, len(file_runes_slice))
-    append_elems(&file_runes, ..file_runes_slice)
+    file_sb: strings.Builder = {}
+    strings.builder_init(&file_sb)
+    strings.write_bytes(&file_sb, file)
     delete(file)
-    delete(file_str)
-    delete(file_runes_slice)
-    buf := init_buffer(file_runes, args[0])
+    buf := init_buffer(&file_sb, args[0])
     append(&ved.buffers, buf)
     raw := termios{}
     res := tcgetattr(STDIN_FILENO, &raw)
@@ -172,7 +169,7 @@ main :: proc() {
                 line_start := line.start + buffer.scroll_cursor.col
                 line_end := clamp((line.end - line_start), 0, int(size.ws_col)) + line_start
                 line_text :=
-                    line_end > line_start ? buffer.data[line_start:line_end] : buffer.data[0:0]
+                    line_end > line_start ? buf_slice_to_string(buffer, line_start, line_end) : ""
                 for r in line_text {
                     if (unicode.is_space(r)) {
                         rendered += len(fmt.bprint(render_buf[rendered:], ' '))
@@ -201,13 +198,13 @@ main :: proc() {
         cur_cursor := min(buffer.cursor.col, cur_line_len - 1)
         for result in ved.search.search_results {
             line_index := line_of_position(buffer.lines[:], result.start)    
-            if line_index < buffer.scroll_cursor.row || line_index > buffer.scroll_cursor.row + buffer.height {
+            if line_index < buffer.scroll_cursor.row || line_index >= buffer.scroll_cursor.row + buffer.height {
                 continue
             }
             line := buffer.lines[line_index]
             set_cursor(result.start - line.start + 1, line_index - buffer.scroll_cursor.row + 1)
             set_inverse_color()
-            text := buffer.data[result.start:result.end]
+            text := buf_slice_to_string(buffer, result.start, result.end)
             for r in text {
                 fmt.print(r)
             }

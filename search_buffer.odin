@@ -19,15 +19,15 @@ has_prefix :: proc(buf: []rune, prefix: []rune) -> bool {
 }
 search_in_buf :: proc(search: ^SearchBuffer, buf: ^Buffer) {
     clear(&search.search_results)
-    if len(buf.data) == 0 { return }
+    if strings.builder_len(buf.data^) == 0 { return }
     //rawbuffer := slice.bytes_from_ptr(rawptr(&buf.data[0]), len(buf.data) * size_of(rune))
-    search_runes := utf8.string_to_runes(strings.to_string(search.search_pattern))
-    defer delete(search_runes)
+    pattern_str := strings.to_string(search.search_pattern)
+    if len(pattern_str) == 0 { return }
     i := 0
-    for i < len(buf.data) - len(search_runes) {
-        if has_prefix(buf.data[i:], search_runes) {
-            append(&search.search_results, SearchResult {start = i, end = i + len(search_runes)})
-            i += len(search_runes)
+    for i < strings.builder_len(buf.data^) - strings.builder_len(search.search_pattern) {
+        if strings.has_prefix(buf_slice_to_string(buf, i), pattern_str) {
+            append(&search.search_results, SearchResult {start = i, end = i + len(pattern_str)})
+            i += len(pattern_str)
         } else {
             i += 1
         }
