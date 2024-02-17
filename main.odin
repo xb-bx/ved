@@ -226,10 +226,6 @@ main :: proc() {
         }
         show_cursor()
         clear(&keys_buf)
-        //buf:[32]u8
-        //os.read(os.stdin, buf[:])
-        //fmt.println(buf)
-        //if true { return }
         read_keys(&keys_buf)
         switch ved.mode {
         case .Search:
