@@ -12,14 +12,22 @@ import "core:unicode/utf8"
 VedMode :: enum {
     Normal,
     Insert,
+    Search,
 }
 Ved :: struct {
     buffers:     [dynamic]Buffer,
     current_buf: int,
     size:        winsize,
     mode:        VedMode,
+    search:      SearchBuffer,
 }
 ved: Ved = {}
+set_inverse_color :: proc() {
+    fmt.printf("\x1b[7m")
+}
+set_normal_color:: proc() {
+    fmt.printf("\x1b[27m")
+}
 set_cursor :: proc(col: int, row: int) {
     fmt.printf("\x1b[%i;%iH", row, col)
 }
@@ -67,6 +75,21 @@ read_keys :: proc(keys_buf: ^[dynamic]Key) {
             if buf[i] <= 26 {
                 append(keys_buf, Key{key_rune = rune(buf[i] + 'a'), mod = {.Control}})
                 i += 1
+            } else if buf[i] == 27 && i + 3 <= n + start {
+                assert(buf[i + 1] == 91)
+                switch buf[i + 2] {
+                    case 68: 
+                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.LeftArrow })
+                    case 67: 
+                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.RightArrow})
+                    case 66: 
+                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.DownArrow })
+                    case 65: 
+                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.UpArrow })
+                    case:
+                        panic("unknown escape")
+                }
+                i+=3 
             } else if buf[i] <= 127 {
                 append(keys_buf, Key{key_rune = rune(buf[i])})
                 i += 1
@@ -83,9 +106,25 @@ read_keys :: proc(keys_buf: ^[dynamic]Key) {
         }
     }
 }
+line_of_position :: proc(lines: []Line, pos: int) -> int {
+    if len(lines) == 0 { return -1 } 
+    if lines[0].start <= pos && lines[0].end >= pos { return 0 }
+    left, mid, right  := 0, len(lines) / 2, len(lines) - 1
+    if lines[mid].start <= pos && lines[mid].end >= pos {
+        return mid
+    } else if lines[mid].start > pos {
+        return line_of_position(lines[0:mid], pos)
+    } else {
+        return mid + line_of_position(lines[mid:right + 1], pos)
+    }
+}
 main :: proc() {
     ved.buffers = make([dynamic]Buffer)
     ved.size = terminal_size()
+    ved.search = SearchBuffer {
+        search_results = make([dynamic]SearchResult),
+    }
+    strings.builder_init(&ved.search.search_pattern)
     args: []string = os.args[1:]
     if len(args) == 0 {
         os.exit(1)
@@ -116,14 +155,17 @@ main :: proc() {
     render_buf := make([]u8, ved.size.ws_row * ved.size.ws_col * size_of(rune))
     keys_buf := make([dynamic]Key)
 
+
     for {
         buffer := &ved.buffers[ved.current_buf]
+        buffer.width = int(ved.size.ws_col)
+        buffer.height = int(ved.size.ws_row) - 2
         size := ved.size
         set_cursor(0, 0)
         hide_cursor()
         slice.zero(render_buf)
         rendered := 0
-        for i in 0 ..< size.ws_row - 1 {
+        for i in 0 ..< buffer.height {
             linei := buffer.scroll_cursor.row + int(i)
             if linei < len(buffer.lines) {
                 line := buffer.lines[linei]
@@ -150,17 +192,41 @@ main :: proc() {
         }
         //fmt.eprintln(render_buf)
         os.write(os.stdout, render_buf)
-        set_cursor(0, int(ved.size.ws_row))
+        set_cursor(0, int(ved.size.ws_row) - 1)
         fmt.print("                                  ")
-        set_cursor(0, int(ved.size.ws_row))
+        set_cursor(0, int(ved.size.ws_row) - 1)
         fmt.printf("%s:%i:%i", buffer.file_name, buffer.cursor.row, buffer.cursor.col)
         current_line := buffer.lines[buffer.cursor.row]
         cur_line_len := current_line.end - current_line.start
         cur_cursor := min(buffer.cursor.col, cur_line_len - 1)
+        for result in ved.search.search_results {
+            line_index := line_of_position(buffer.lines[:], result.start)    
+            if line_index < buffer.scroll_cursor.row || line_index > buffer.scroll_cursor.row + buffer.height {
+                continue
+            }
+            line := buffer.lines[line_index]
+            set_cursor(result.start - line.start + 1, line_index - buffer.scroll_cursor.row + 1)
+            set_inverse_color()
+            text := buffer.data[result.start:result.end]
+            for r in text {
+                fmt.print(r)
+            }
+            set_normal_color()
+        }
         set_cursor(
             (cur_cursor - buffer.scroll_cursor.col) + 1,
             buffer.cursor.row - buffer.scroll_cursor.row + 1,
         )
+        if ved.mode == .Search {
+            set_cursor(0, int(ved.size.ws_row))
+            fmt.print("/")
+            fmt.print(strings.to_string(ved.search.search_pattern))
+            for i in 0..<int(ved.size.ws_col) - strings.builder_len(ved.search.search_pattern) - 1 {
+                fmt.print(" ")
+            }
+            set_cursor(2 + ved.search.position, int(ved.size.ws_row))
+
+        }
         show_cursor()
         clear(&keys_buf)
         //buf:[32]u8
@@ -168,7 +234,44 @@ main :: proc() {
         //fmt.println(buf)
         //if true { return }
         read_keys(&keys_buf)
-        if ved.mode == VedMode.Normal {
+        switch ved.mode {
+        case .Search:
+            pattern := &ved.search.search_pattern
+            for k in keys_buf {
+                if k.special_key != .None {
+                    #partial switch k.special_key {
+                        case .LeftArrow:
+                            ved.search.position = clamp(ved.search.position - 1, 0, strings.builder_len(pattern^))
+                        case .RightArrow:
+                            ved.search.position = clamp(ved.search.position + 1, 0, strings.builder_len(pattern^))
+                        case:
+                    }
+                }
+                else {
+                    switch k.key_rune {
+                    case '\x1b':
+                        set_cursor_block()
+                        ved.mode = .Normal
+                    case '\x7f':
+                        if ved.search.position > 0 {
+                            ordered_remove(&pattern.buf, ved.search.position - 1)
+                            ved.search.position -= 1
+                        }
+                        search_in_buf(&ved.search, buffer)
+                    case:
+                        if ved.search.position == strings.builder_len(pattern^) {
+                            fmt.sbprint(pattern, k.key_rune)
+
+                        } else {
+                            bytes, n := utf8.encode_rune(k.key_rune) 
+                            inject_at(&pattern.buf, ved.search.position, ..bytes[:n])
+                        }
+                        ved.search.position += 1
+                        search_in_buf(&ved.search, buffer)
+                    }
+                }
+            }
+        case .Normal:
             for k in keys_buf {
                 switch k.key_rune {
                 case 'h':
@@ -185,9 +288,12 @@ main :: proc() {
                 case 'q':
                     tcsetattr(STDIN_FILENO, TCSANOW, &raw)
                     return
+                case '/':
+                    set_cursor_line()
+                    ved.mode = VedMode.Search
                 }
             }
-        } else if ved.mode == VedMode.Insert {
+        case .Insert:
             for k in keys_buf {
                 switch k.key_rune {
                 // ESCAPE
