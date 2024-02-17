@@ -196,24 +196,25 @@ main :: proc() {
         current_line := buffer.lines[buffer.cursor.row]
         cur_line_len := current_line.end - current_line.start
         cur_cursor := min(buffer.cursor.col, cur_line_len - 1)
+        term_col := (cur_cursor - buffer.scroll_cursor.col) + 1
+        term_row := buffer.cursor.row - buffer.scroll_cursor.row + 1
         for result in ved.search.search_results {
             line_index := line_of_position(buffer.lines[:], result.start)    
             if line_index < buffer.scroll_cursor.row || line_index >= buffer.scroll_cursor.row + buffer.height {
                 continue
             }
             line := buffer.lines[line_index]
-            set_cursor(result.start - line.start + 1, line_index - buffer.scroll_cursor.row + 1)
-            set_inverse_color()
+            col := result.start - line.start + 1
+            row := line_index - buffer.scroll_cursor.row + 1
+            set_cursor(col, row)
+            if col != term_col || row != term_row do set_inverse_color()
             text := buf_slice_to_string(buffer, result.start, result.end)
             for r in text {
                 fmt.print(r)
             }
             set_normal_color()
         }
-        set_cursor(
-            (cur_cursor - buffer.scroll_cursor.col) + 1,
-            buffer.cursor.row - buffer.scroll_cursor.row + 1,
-        )
+        set_cursor(term_col, term_row)
         if ved.mode == .Search {
             set_cursor(0, int(ved.size.ws_row))
             fmt.print("/")
@@ -275,6 +276,51 @@ main :: proc() {
                     buf_cursor_row(buffer, -1)
                 case 'l':
                     buf_cursor_col(buffer, 1)
+                case 'N':
+                    if len(ved.search.search_results) > 0 {
+                        next := -1
+                        for res, i in ved.search.search_results {
+                            if res.start >= buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
+                                next = i - 1
+                                break
+                            }    
+                        }
+                    
+                        res := SearchResult {}
+                        if next == len(ved.search.search_results) {
+                            res = ved.search.search_results[0]
+                        } else if next == -1 {
+                            res = ved.search.search_results[len(ved.search.search_results) - 1]
+                        } else {
+                            res = ved.search.search_results[next]
+                        }
+                        row := line_of_position(buffer.lines[:], res.start)
+                        buf_cursor_row(buffer, row - buffer.cursor.row)
+                        col := res.start - buffer.lines[row].start
+                        buf_cursor_col(buffer, -99999)
+                        buf_cursor_col(buffer, col)
+                    }
+                case 'n':
+                    if len(ved.search.search_results) > 0 {
+                        next := -1
+                        for res, i in ved.search.search_results {
+                            if res.start > buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
+                                next = i
+                                break
+                            }    
+                        }
+                        res := SearchResult {}
+                        if next == len(ved.search.search_results) || next == -1 {
+                            res = ved.search.search_results[0]
+                        } else {
+                            res = ved.search.search_results[next]
+                        }
+                        row := line_of_position(buffer.lines[:], res.start)
+                        buf_cursor_row(buffer, row - buffer.cursor.row)
+                        col := res.start - buffer.lines[row].start
+                        buf_cursor_col(buffer, -99999)
+                        buf_cursor_col(buffer, col)
+                    }
                 case 'i':
                     set_cursor_line()
                     ved.mode = VedMode.Insert

@@ -76,10 +76,10 @@ buf_cursor_row :: proc(buf: ^Buffer, dir: int) {
     row := clamp(buf.cursor.row + dir, 0, len(buf.lines) - 1)
     buf.cursor.row = row
     if buf.cursor.row - buf.scroll_cursor.row >= buf.height {
-        buf.scroll_cursor.row += 1
+        buf.scroll_cursor.row += buf.cursor.row - buf.scroll_cursor.row
     }
     else if buf.cursor.row - buf.scroll_cursor.row <= 0 {
-        buf.scroll_cursor.row -= 1
+        buf.scroll_cursor.row -= buf.scroll_cursor.row - buf.cursor.row
     }
     buf.scroll_cursor.row = clamp(buf.scroll_cursor.row, 0, len(buf.lines))
     line := buf.lines[row]
