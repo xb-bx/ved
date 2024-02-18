@@ -25,7 +25,7 @@ ved: Ved = {}
 set_inverse_color :: proc() {
     fmt.printf("\x1b[7m")
 }
-set_normal_color:: proc() {
+set_normal_color :: proc() {
     fmt.printf("\x1b[27m")
 }
 set_cursor :: proc(col: int, row: int) {
@@ -78,18 +78,18 @@ read_keys :: proc(keys_buf: ^[dynamic]Key) {
             } else if buf[i] == 27 && i + 3 <= n + start {
                 assert(buf[i + 1] == 91)
                 switch buf[i + 2] {
-                    case 68: 
-                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.LeftArrow })
-                    case 67: 
-                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.RightArrow})
-                    case 66: 
-                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.DownArrow })
-                    case 65: 
-                        append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.UpArrow })
-                    case:
-                        panic("unknown escape")
+                case 68:
+                    append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.LeftArrow})
+                case 67:
+                    append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.RightArrow})
+                case 66:
+                    append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.DownArrow})
+                case 65:
+                    append(keys_buf, Key{key_rune = '\x1b', special_key = SpecialKey.UpArrow})
+                case:
+                    panic("unknown escape")
                 }
-                i+=3 
+                i += 3
             } else if buf[i] <= 127 {
                 append(keys_buf, Key{key_rune = rune(buf[i])})
                 i += 1
@@ -107,9 +107,9 @@ read_keys :: proc(keys_buf: ^[dynamic]Key) {
     }
 }
 line_of_position :: proc(lines: []Line, pos: int) -> int {
-    if len(lines) == 0 { return -1 } 
-    if lines[0].start <= pos && lines[0].end >= pos { return 0 }
-    left, mid, right  := 0, len(lines) / 2, len(lines) - 1
+    if len(lines) == 0 {return -1}
+    if lines[0].start <= pos && lines[0].end >= pos {return 0}
+    left, mid, right := 0, len(lines) / 2, len(lines) - 1
     if lines[mid].start <= pos && lines[mid].end >= pos {
         return mid
     } else if lines[mid].start > pos {
@@ -199,8 +199,9 @@ main :: proc() {
         term_col := (cur_cursor - buffer.scroll_cursor.col) + 1
         term_row := clamp(buffer.cursor.row - buffer.scroll_cursor.row + 1, 0, buffer.height)
         for result in ved.search.search_results {
-            line_index := line_of_position(buffer.lines[:], result.start)    
-            if line_index < buffer.scroll_cursor.row || line_index >= buffer.scroll_cursor.row + buffer.height {
+            line_index := line_of_position(buffer.lines[:], result.start)
+            if line_index < buffer.scroll_cursor.row ||
+               line_index >= buffer.scroll_cursor.row + buffer.height {
                 continue
             }
             line := buffer.lines[line_index]
@@ -219,7 +220,9 @@ main :: proc() {
             set_cursor(0, int(ved.size.ws_row))
             fmt.print("/")
             fmt.print(strings.to_string(ved.search.search_pattern))
-            for i in 0..<int(ved.size.ws_col) - strings.builder_len(ved.search.search_pattern) - 1 {
+            for i in 0 ..< int(ved.size.ws_col) -
+                strings.builder_len(ved.search.search_pattern) -
+                1 {
                 fmt.print(" ")
             }
             set_cursor(2 + ved.search.position, int(ved.size.ws_row))
@@ -234,14 +237,21 @@ main :: proc() {
             for k in keys_buf {
                 if k.special_key != .None {
                     #partial switch k.special_key {
-                        case .LeftArrow:
-                            ved.search.position = clamp(ved.search.position - 1, 0, strings.builder_len(pattern^))
-                        case .RightArrow:
-                            ved.search.position = clamp(ved.search.position + 1, 0, strings.builder_len(pattern^))
-                        case:
+                    case .LeftArrow:
+                        ved.search.position = clamp(
+                            ved.search.position - 1,
+                            0,
+                            strings.builder_len(pattern^),
+                        )
+                    case .RightArrow:
+                        ved.search.position = clamp(
+                            ved.search.position + 1,
+                            0,
+                            strings.builder_len(pattern^),
+                        )
+                    case:
                     }
-                }
-                else {
+                } else {
                     switch k.key_rune {
                     case '\x1b':
                         set_cursor_block()
@@ -257,7 +267,7 @@ main :: proc() {
                             fmt.sbprint(pattern, k.key_rune)
 
                         } else {
-                            bytes, n := utf8.encode_rune(k.key_rune) 
+                            bytes, n := utf8.encode_rune(k.key_rune)
                             inject_at(&pattern.buf, ved.search.position, ..bytes[:n])
                         }
                         ved.search.position += 1
@@ -267,119 +277,153 @@ main :: proc() {
             }
         case .Normal:
             for k in keys_buf {
-                switch k.key_rune {
-                case 'h':
-                    buf_cursor_col(buffer, -1)
-                case 'j':
-                    buf_cursor_row(buffer, 1)
-                case 'k':
-                    buf_cursor_row(buffer, -1)
-                case 'l':
-                    buf_cursor_col(buffer, 1)
-                case 'N':
-                    if len(ved.search.search_results) > 0 {
-                        next := -1
-                        for res, i in ved.search.search_results {
-                            if res.start >= buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
-                                next = i - 1
-                                break
-                            }    
-                        }
-                    
-                        res := SearchResult {}
-                        if next == len(ved.search.search_results) {
-                            res = ved.search.search_results[0]
-                        } else if next == -1 {
-                            res = ved.search.search_results[len(ved.search.search_results) - 1]
-                        } else {
-                            res = ved.search.search_results[next]
-                        }
-                        row := line_of_position(buffer.lines[:], res.start)
-                        buf_cursor_row(buffer, row - buffer.cursor.row)
-                        col := res.start - buffer.lines[row].start
-                        buf_cursor_col(buffer, -99999)
-                        buf_cursor_col(buffer, col)
+                if k.special_key != .None {
+                    switch k.special_key {
+                    case .LeftArrow:
+                        buf_cursor_col(buffer, -1)
+                    case .DownArrow, .Enter:
+                        buf_cursor_row(buffer, 1)
+                    case .UpArrow:
+                        buf_cursor_row(buffer, -1)
+                    case .RightArrow:
+                        buf_cursor_col(buffer, 1)
+                    case .Escape, .None:
                     }
-                case 'n':
-                    if len(ved.search.search_results) > 0 {
-                        next := -1
-                        for res, i in ved.search.search_results {
-                            if res.start > buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
-                                next = i
-                                break
-                            }    
-                        }
-                        res := SearchResult {}
-                        if next == len(ved.search.search_results) || next == -1 {
-                            res = ved.search.search_results[0]
-                        } else {
-                            res = ved.search.search_results[next]
-                        }
-                        row := line_of_position(buffer.lines[:], res.start)
-                        buf_cursor_row(buffer, row - buffer.cursor.row)
-                        col := res.start - buffer.lines[row].start
-                        buf_cursor_col(buffer, -99999)
-                        buf_cursor_col(buffer, col)
-                    }
-                case 'i':
-                    set_cursor_line()
-                    ved.mode = VedMode.Insert
-                case 'a':
-                    set_cursor_line()
-                    ved.mode = VedMode.Insert
-                    buf_cursor_col(buffer, 1)
-                case 'D':
-                    line := buffer.lines[buffer.cursor.row]
-                    buf_remove_range(buffer, line.start + buffer.cursor.col, line.end - 1)
-                case 'o':
-                    set_cursor_line()
-                    ved.mode = VedMode.Insert
-                    line_end := buffer.lines[buffer.cursor.row].end
-                    buf_cursor_col(buffer, line_end - buffer.cursor.col + 1)
-                    sb_insert_rune(buffer.data, line_end + 1, '\n')
-                    split_into_lines(buffer.data, &buffer.lines)
-                    buf_cursor_row(buffer, 1)
-                    buf_cursor_col(buffer, -1)
-                case '$':
-                    buf_cursor_col(buffer, buffer.lines[buffer.cursor.row].end - buffer.cursor.col)
-                case '^':
-                    line := buffer.lines[buffer.cursor.row]
-                    for c, i in buf_cur_line_string(buffer) {
-                        if !unicode.is_space(c) {
+                } else {
+                    switch k.key_rune {
+                    case 'h':
+                        buf_cursor_col(buffer, -1)
+                    case 'j':
+                        buf_cursor_row(buffer, 1)
+                    case 'k':
+                        buf_cursor_row(buffer, -1)
+                    case 'l':
+                        buf_cursor_col(buffer, 1)
+                    case 'N':
+                        if len(ved.search.search_results) > 0 {
+                            next := -1
+                            for res, i in ved.search.search_results {
+                                if res.start >=
+                                   buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
+                                    next = i - 1
+                                    break
+                                }
+                            }
+
+                            res := SearchResult{}
+                            if next == len(ved.search.search_results) {
+                                res = ved.search.search_results[0]
+                            } else if next == -1 {
+                                res = ved.search.search_results[len(ved.search.search_results) - 1]
+                            } else {
+                                res = ved.search.search_results[next]
+                            }
+                            row := line_of_position(buffer.lines[:], res.start)
+                            buf_cursor_row(buffer, row - buffer.cursor.row)
+                            col := res.start - buffer.lines[row].start
                             buf_cursor_col(buffer, -99999)
-                            buf_cursor_col(buffer, i)
-                            break
+                            buf_cursor_col(buffer, col)
                         }
+                    case 'n':
+                        if len(ved.search.search_results) > 0 {
+                            next := -1
+                            for res, i in ved.search.search_results {
+                                if res.start >
+                                   buffer.lines[buffer.cursor.row].start + buffer.cursor.col {
+                                    next = i
+                                    break
+                                }
+                            }
+                            res := SearchResult{}
+                            if next == len(ved.search.search_results) || next == -1 {
+                                res = ved.search.search_results[0]
+                            } else {
+                                res = ved.search.search_results[next]
+                            }
+                            row := line_of_position(buffer.lines[:], res.start)
+                            buf_cursor_row(buffer, row - buffer.cursor.row)
+                            col := res.start - buffer.lines[row].start
+                            buf_cursor_col(buffer, -99999)
+                            buf_cursor_col(buffer, col)
+                        }
+                    case 'i':
+                        set_cursor_line()
+                        ved.mode = VedMode.Insert
+                    case 'a':
+                        set_cursor_line()
+                        ved.mode = VedMode.Insert
+                        buf_cursor_col(buffer, 1)
+                    case 'D':
+                        line := buffer.lines[buffer.cursor.row]
+                        buf_remove_range(buffer, line.start + buffer.cursor.col, line.end - 1)
+                    case 'o':
+                        set_cursor_line()
+                        ved.mode = VedMode.Insert
+                        line_end := buffer.lines[buffer.cursor.row].end
+                        buf_cursor_col(buffer, line_end - buffer.cursor.col + 1)
+                        sb_insert_rune(buffer.data, line_end + 1, '\n')
+                        split_into_lines(buffer.data, &buffer.lines)
+                        buf_cursor_row(buffer, 1)
+                        buf_cursor_col(buffer, -1)
+                    case '$':
+                        buf_cursor_col(
+                            buffer,
+                            buffer.lines[buffer.cursor.row].end - buffer.cursor.col,
+                        )
+                    case '^':
+                        line := buffer.lines[buffer.cursor.row]
+                        for c, i in buf_cur_line_string(buffer) {
+                            if !unicode.is_space(c) {
+                                buf_cursor_col(buffer, -99999)
+                                buf_cursor_col(buffer, i)
+                                break
+                            }
+                        }
+                    case 'q':
+                        tcsetattr(STDIN_FILENO, TCSANOW, &raw)
+                        return
+                    case '/':
+                        set_cursor_line()
+                        ved.mode = VedMode.Search
                     }
-                case 'q':
-                    tcsetattr(STDIN_FILENO, TCSANOW, &raw)
-                    return
-                case '/':
-                    set_cursor_line()
-                    ved.mode = VedMode.Search
                 }
             }
         case .Insert:
             for k in keys_buf {
-                switch k.key_rune {
-                // ESCAPE
-                case '\x1b':
-                    set_cursor_block()
-                    ved.mode = VedMode.Normal
-                    break
-                // BACKSPACE
-                case '\x7f':
-                    buf_remove(buffer)
-                case 'n':
-                    if Modifier.Control in k.mod {
-                        buf_insert(buffer, '\n')
+                if k.special_key != .None {
+                    switch k.special_key {
+                    case .LeftArrow:
                         buf_cursor_col(buffer, -1)
+                    case .DownArrow, .Enter:
                         buf_cursor_row(buffer, 1)
-                    } else {
-                        buf_insert(buffer, 'n')
+                    case .UpArrow:
+                        buf_cursor_row(buffer, -1)
+                    case .RightArrow:
+                        buf_cursor_col(buffer, 1)
+                    case .Escape, .None:
                     }
-                case:
-                    buf_insert(buffer, k.key_rune)
+                } else {
+                    switch k.key_rune {
+                    // ESCAPE
+                    case '\x1b':
+                        set_cursor_block()
+                        ved.mode = VedMode.Normal
+                        break
+                    // BACKSPACE
+                    case '\x7f':
+                        buf_remove(buffer)
+                    case 'n':
+                        if Modifier.Control in k.mod {
+                            buf_insert(buffer, '\n')
+                            buf_cursor_col(buffer, -1)
+                            buf_cursor_row(buffer, 1)
+                        } else {
+                            buf_insert(buffer, 'n')
+                        }
+                    case:
+                        buf_insert(buffer, k.key_rune)
+
+                    }
 
                 }
             }
