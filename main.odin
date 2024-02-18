@@ -2,6 +2,7 @@ package ved
 import "base:intrinsics"
 import "core:c"
 import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:slice"
 import "core:strings"
@@ -73,7 +74,10 @@ read_keys :: proc(keys_buf: ^[dynamic]Key) {
         i := 0
         for i < n + start {
             if buf[i] <= 26 {
-                append(keys_buf, Key{key_rune = rune(buf[i] + 'a'), mod = {.Control}})
+                ch := buf[i] + 'a'
+                special := SpecialKey.None
+                if ch == 'n' do special = .Enter
+                append(keys_buf, Key{key_rune = rune(ch), mod = {.Control}, special_key = special})
                 i += 1
             } else if buf[i] == 27 && i + 3 <= n + start {
                 assert(buf[i + 1] == 91)
@@ -119,6 +123,12 @@ line_of_position :: proc(lines: []Line, pos: int) -> int {
     }
 }
 main :: proc() {
+    log_file, err := os.open("log.txt", os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0o640)
+    if err != os.ERROR_NONE {
+        fmt.println(err)
+        panic("")
+    }
+    context.logger = log.create_file_logger(log_file)
     ved.buffers = make([dynamic]Buffer)
     ved.size = terminal_size()
     ved.search = SearchBuffer {
@@ -167,7 +177,7 @@ main :: proc() {
             if linei < len(buffer.lines) {
                 line := buffer.lines[linei]
                 line_start := line.start + buffer.scroll_cursor.col
-                line_end := clamp((line.end - line_start), 0, int(size.ws_col)) + line_start
+                line_end := clamp((line.len), 0, int(size.ws_col)) + line_start
                 line_text :=
                     line_end > line_start ? buf_slice_to_string(buffer, line_start, line_end) : ""
                 for r in line_text {
@@ -194,8 +204,7 @@ main :: proc() {
         set_cursor(0, int(ved.size.ws_row) - 1)
         fmt.printf("%s:%i:%i", buffer.file_name, buffer.cursor.row, buffer.cursor.col)
         current_line := buffer.lines[buffer.cursor.row]
-        cur_line_len := current_line.end - current_line.start
-        cur_cursor := min(buffer.cursor.col, cur_line_len - 1)
+        cur_cursor := min(buffer.cursor.col, current_line.len - 1)
         term_col := (cur_cursor - buffer.scroll_cursor.col) + 1
         term_row := clamp(buffer.cursor.row - buffer.scroll_cursor.row + 1, 0, buffer.height)
         for result in ved.search.search_results {
@@ -249,7 +258,9 @@ main :: proc() {
                             0,
                             strings.builder_len(pattern^),
                         )
-                    case:
+                    case .Enter, .Escape:
+                        ved.mode = .Normal
+                        set_cursor_block()
                     }
                 } else {
                     switch k.key_rune {
@@ -359,9 +370,9 @@ main :: proc() {
                     case 'o':
                         set_cursor_line()
                         ved.mode = VedMode.Insert
-                        line_end := buffer.lines[buffer.cursor.row].end
+                        line_end := buffer.lines[buffer.cursor.row].rune_end
                         buf_cursor_col(buffer, line_end - buffer.cursor.col + 1)
-                        sb_insert_rune(buffer.data, line_end + 1, '\n')
+                        sb_insert_rune(buffer.data, line_end, '\n')
                         split_into_lines(buffer.data, &buffer.lines)
                         buf_cursor_row(buffer, 1)
                         buf_cursor_col(buffer, -1)
@@ -394,13 +405,21 @@ main :: proc() {
                     switch k.special_key {
                     case .LeftArrow:
                         buf_cursor_col(buffer, -1)
-                    case .DownArrow, .Enter:
+                    case .DownArrow:
                         buf_cursor_row(buffer, 1)
                     case .UpArrow:
                         buf_cursor_row(buffer, -1)
                     case .RightArrow:
                         buf_cursor_col(buffer, 1)
-                    case .Escape, .None:
+                    case .Enter:
+                        buf_insert(buffer, '\n')
+                        buf_cursor_col(buffer, -999)
+                        buf_cursor_row(buffer, 1)
+                    case .Escape:
+                        set_cursor_block()
+                        ved.mode = VedMode.Normal
+                        break
+                    case .None:
                     }
                 } else {
                     switch k.key_rune {
@@ -413,13 +432,7 @@ main :: proc() {
                     case '\x7f':
                         buf_remove(buffer)
                     case 'n':
-                        if Modifier.Control in k.mod {
-                            buf_insert(buffer, '\n')
-                            buf_cursor_col(buffer, -1)
-                            buf_cursor_row(buffer, 1)
-                        } else {
-                            buf_insert(buffer, 'n')
-                        }
+                        buf_insert(buffer, 'n')
                     case:
                         buf_insert(buffer, k.key_rune)
 
