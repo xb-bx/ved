@@ -33,7 +33,7 @@ split_into_lines :: proc(data: ^strings.Builder, lines: ^[dynamic]Line) {
     str := strings.to_string(data^)
     for b,i  in str {
         if b == '\n' {
-            line.end = i
+            line.end = i + 1
             append(lines, Line { start = i + 1, end = i + 1 })
             line = &lines[len(lines) - 1]
         }
@@ -55,11 +55,11 @@ buf_slice_to_string_from_to :: proc(buf: ^Buffer, lo: int, hi: int) -> string {
 buf_cursor_col :: proc(buf: ^Buffer, dir: int) {
     line := buf.lines[buf.cursor.row]
     line_len := line.end - line.start
-    if buf.cursor.col >= line_len { 
+    if buf.cursor.col > line_len { 
         if dir > 0 {
             return
         } else {
-            buf.cursor.col = clamp(line_len - 1 + dir, 0, line_len)
+            buf.cursor.col = clamp(line_len - 1 + dir, 0, line_len + 1)
         }
     }
     else {
@@ -76,7 +76,7 @@ buf_cursor_row :: proc(buf: ^Buffer, dir: int) {
     row := clamp(buf.cursor.row + dir, 0, len(buf.lines) - 1)
     buf.cursor.row = row
     if buf.cursor.row - buf.scroll_cursor.row >= buf.height {
-        buf.scroll_cursor.row += buf.cursor.row - buf.scroll_cursor.row
+        buf.scroll_cursor.row += buf.cursor.row - buf.scroll_cursor.row - buf.height + 1
     }
     else if buf.cursor.row - buf.scroll_cursor.row <= 0 {
         buf.scroll_cursor.row -= buf.scroll_cursor.row - buf.cursor.row
@@ -102,7 +102,7 @@ sb_remove_at :: proc(sb: ^strings.Builder, pos: int) {
 buf_insert :: proc(buf: ^Buffer, r: rune) {
     line := buf.lines[buf.cursor.row]
     line_len := line.end - line.start
-    buf.cursor.col = clamp(buf.cursor.col, 0, line_len - 1)
+    buf.cursor.col = clamp(buf.cursor.col, 0, max(0, line_len - 1))
     sb_insert_rune(buf.data, line.start + buf.cursor.col, r) 
     split_into_lines(buf.data, &buf.lines)
     buf.cursor.col += 1
@@ -130,4 +130,15 @@ buf_remove :: proc(buf: ^Buffer) {
         split_into_lines(buf.data, &buf.lines)
     }
 
+}
+buf_remove_range :: proc(buf: ^Buffer, lo: int, hi: int) {
+    if hi - lo <= 0 { return }
+    remove_range(&buf.data.buf, lo, hi)
+    split_into_lines(buf.data, &buf.lines)
+}
+buf_line_as_string :: proc(buf: ^Buffer, line: Line) -> string {
+    return buf_slice_to_string_from_to(buf, line.start, line.end)
+}
+buf_cur_line_string :: proc(buf: ^Buffer) -> string {
+    return buf_line_as_string(buf, buf.lines[buf.cursor.row])
 }

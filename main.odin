@@ -156,7 +156,7 @@ main :: proc() {
     for {
         buffer := &ved.buffers[ved.current_buf]
         buffer.width = int(ved.size.ws_col)
-        buffer.height = int(ved.size.ws_row) - 2
+        buffer.height = int(ved.size.ws_row) - 3
         size := ved.size
         set_cursor(0, 0)
         hide_cursor()
@@ -197,7 +197,7 @@ main :: proc() {
         cur_line_len := current_line.end - current_line.start
         cur_cursor := min(buffer.cursor.col, cur_line_len - 1)
         term_col := (cur_cursor - buffer.scroll_cursor.col) + 1
-        term_row := buffer.cursor.row - buffer.scroll_cursor.row + 1
+        term_row := clamp(buffer.cursor.row - buffer.scroll_cursor.row + 1, 0, buffer.height)
         for result in ved.search.search_results {
             line_index := line_of_position(buffer.lines[:], result.start)    
             if line_index < buffer.scroll_cursor.row || line_index >= buffer.scroll_cursor.row + buffer.height {
@@ -324,6 +324,33 @@ main :: proc() {
                 case 'i':
                     set_cursor_line()
                     ved.mode = VedMode.Insert
+                case 'a':
+                    set_cursor_line()
+                    ved.mode = VedMode.Insert
+                    buf_cursor_col(buffer, 1)
+                case 'D':
+                    line := buffer.lines[buffer.cursor.row]
+                    buf_remove_range(buffer, line.start + buffer.cursor.col, line.end - 1)
+                case 'o':
+                    set_cursor_line()
+                    ved.mode = VedMode.Insert
+                    line_end := buffer.lines[buffer.cursor.row].end
+                    buf_cursor_col(buffer, line_end - buffer.cursor.col + 1)
+                    sb_insert_rune(buffer.data, line_end + 1, '\n')
+                    split_into_lines(buffer.data, &buffer.lines)
+                    buf_cursor_row(buffer, 1)
+                    buf_cursor_col(buffer, -1)
+                case '$':
+                    buf_cursor_col(buffer, buffer.lines[buffer.cursor.row].end - buffer.cursor.col)
+                case '^':
+                    line := buffer.lines[buffer.cursor.row]
+                    for c, i in buf_cur_line_string(buffer) {
+                        if !unicode.is_space(c) {
+                            buf_cursor_col(buffer, -99999)
+                            buf_cursor_col(buffer, i)
+                            break
+                        }
+                    }
                 case 'q':
                     tcsetattr(STDIN_FILENO, TCSANOW, &raw)
                     return
