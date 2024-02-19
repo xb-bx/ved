@@ -21,6 +21,7 @@ Ved :: struct {
     size:        winsize,
     mode:        VedMode,
     search:      SearchBuffer,
+    count:       int,
 }
 ved: Ved = {}
 set_inverse_color :: proc() {
@@ -166,7 +167,7 @@ main :: proc() {
     for {
         buffer := &ved.buffers[ved.current_buf]
         buffer.width = int(ved.size.ws_col)
-        buffer.height = int(ved.size.ws_row) - 3
+        buffer.height = int(ved.size.ws_row) - 2
         size := ved.size
         set_cursor(0, 0)
         hide_cursor()
@@ -287,29 +288,35 @@ main :: proc() {
                 }
             }
         case .Normal:
+            reset_count := true
+            count := ved.count == 0 ? 1 : ved.count
             for k in keys_buf {
                 if k.special_key != .None {
                     switch k.special_key {
                     case .LeftArrow:
-                        buf_cursor_col(buffer, -1)
+                        buf_cursor_col(buffer, -1 * count)
                     case .DownArrow, .Enter:
-                        buf_cursor_row(buffer, 1)
+                        buf_cursor_row(buffer, 1 * count)
                     case .UpArrow:
-                        buf_cursor_row(buffer, -1)
+                        buf_cursor_row(buffer, -1 * count)
                     case .RightArrow:
-                        buf_cursor_col(buffer, 1)
+                        buf_cursor_col(buffer, 1 * count)
                     case .Escape, .None:
                     }
                 } else {
                     switch k.key_rune {
+                    case '1' ..= '9':
+                        ved.count *= 10
+                        ved.count += int(k.key_rune) - int('0')
+                        reset_count = false
                     case 'h':
-                        buf_cursor_col(buffer, -1)
+                        buf_cursor_col(buffer, -1 * count)
                     case 'j':
-                        buf_cursor_row(buffer, 1)
+                        buf_cursor_row(buffer, 1 * count)
                     case 'k':
-                        buf_cursor_row(buffer, -1)
+                        buf_cursor_row(buffer, -1 * count)
                     case 'l':
-                        buf_cursor_col(buffer, 1)
+                        buf_cursor_col(buffer, 1 * count)
                     case 'N':
                         if len(ved.search.search_results) > 0 {
                             next := -1
@@ -357,6 +364,12 @@ main :: proc() {
                             buf_cursor_col(buffer, -99999)
                             buf_cursor_col(buffer, col)
                         }
+                    case 'x':
+                        line := buffer.lines[buffer.cursor.row]
+                        start := clamp(buffer.cursor.col, 0, line.len)
+                        end := start + clamp(count, 0, line.len - start)
+                        if end == line.len do end -= 1 // Ensure we dont remove '\n'
+                        buf_remove_range(buffer, line.start + start, line.start + end)  
                     case 'i':
                         set_cursor_line()
                         ved.mode = VedMode.Insert
@@ -366,7 +379,7 @@ main :: proc() {
                         buf_cursor_col(buffer, 1)
                     case 'D':
                         line := buffer.lines[buffer.cursor.row]
-                        buf_remove_range(buffer, line.start + buffer.cursor.col, line.end - 1)
+                        buf_remove_range(buffer, line.start + buffer.cursor.col, line.end)
                     case 'o':
                         set_cursor_line()
                         ved.mode = VedMode.Insert
@@ -399,6 +412,7 @@ main :: proc() {
                     }
                 }
             }
+            if reset_count do ved.count = 0
         case .Insert:
             for k in keys_buf {
                 if k.special_key != .None {
