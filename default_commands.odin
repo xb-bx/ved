@@ -38,8 +38,7 @@ add_default_commands :: proc(ved: ^Ved) {
         action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_row(buf, 999999999999); buf_cursor_col(buf, -9999999999); return .CommandFinished },
     })
     append(&ved.commands, Command {
-        binding = binding_from_chars("h"),
-        action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_col(buf, -1 * times_todo(ved)); return .CommandFinished },
+        binding = binding_from_chars("h"), action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_col(buf, -1 * times_todo(ved)); return .CommandFinished },
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("j"),
@@ -75,6 +74,27 @@ add_default_commands :: proc(ved: ^Ved) {
         action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState {
             line := buf.lines[buf.cursor.row]
             buf_remove_range(buf, line.start + buf.cursor.col, line.end)
+            return .CommandFinished
+        },
+    })
+    append(&ved.commands, Command {
+        binding = binding_from_chars("dt"),
+        action = proc(ved: ^Ved, buf: ^Buffer, c: string) -> CommandState {
+            if len(c) < 1 { return .CommandReadChar }
+            line := buf.lines[buf.cursor.row]
+            line_str := buf_line_as_string(buf, line)
+            run, s := utf8.decode_rune_in_string(c)
+            if s <= 0 {
+                return .CommandFinished
+            }
+            orig := clamp(0, buf.cursor.col, line.len)
+            orig_off := utf8.rune_offset(line_str, orig)
+            r, orig_size := utf8.decode_rune(line_str[orig:])
+            if orig_size <= 0 { return .CommandFinished } 
+            index := strings.index_rune(line_str[orig_off + orig_size:], run)
+            if index <= 0 { return .CommandFinished } 
+            off := orig_off + index
+            buf_remove_range(buf, orig_off + line.start, off + orig_size + line.start)
             return .CommandFinished
         },
     })
