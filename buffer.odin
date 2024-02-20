@@ -143,9 +143,14 @@ buf_remove :: proc(buf: ^Buffer) {
 
 }
 buf_remove_range :: proc(buf: ^Buffer, lo: int, hi: int) {
-    if hi - lo <= 0 {return}
+    if hi - lo <= 0 || strings.builder_len(buf.data^) <= 1 {return}
     remove_range(&buf.data.buf, lo, hi)
+    if len(buf.data.buf) == 0 {
+        append(&buf.data.buf, '\n')
+        log.info(buf.lines)        
+    }
     split_into_lines(buf.data, &buf.lines)
+    
 }
 buf_line_as_string :: proc(buf: ^Buffer, line: Line) -> string {
     return buf_slice_to_string_from_to(buf, line.start, line.end)
