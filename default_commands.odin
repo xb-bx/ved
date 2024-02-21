@@ -51,14 +51,17 @@ add_default_commands :: proc(ved: ^Ved) {
     append(&ved.commands, Command {
         binding = binding_from_chars("f"),
         action = find_next,
+        repeatable = true,
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("gg"),
         action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_row(buf, -999999999999); buf_cursor_row(buf, ved.count); buf_cursor_col(buf, -9999999999); return .CommandFinished },
+        repeatable = true,
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("G"),
         action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_row(buf, 999999999999); buf_cursor_col(buf, -9999999999); return .CommandFinished },
+        repeatable = true,
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("h"), action = proc(ved: ^Ved, buf: ^Buffer, _: string) -> CommandState { buf_cursor_col(buf, -1 * times_todo(ved)); return .CommandFinished },
@@ -91,6 +94,7 @@ add_default_commands :: proc(ved: ^Ved) {
             buf_remove_range(buf, line.start + start, line.start + end)
             return .CommandFinished
         },
+        repeatable = true,
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("D"),
@@ -99,6 +103,7 @@ add_default_commands :: proc(ved: ^Ved) {
             buf_remove_range(buf, line.start + buf.cursor.col, line.end)
             return .CommandFinished
         },
+        repeatable = true,
     })
     append(&ved.commands, Command {
         binding = binding_from_chars("dt"),
@@ -123,5 +128,6 @@ add_default_commands :: proc(ved: ^Ved) {
             buf_remove_range(buf, orig_off + line.start, off + orig_size + line.start)
             return .CommandFinished
         },
+        repeatable = true,
     })
 }

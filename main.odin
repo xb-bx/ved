@@ -28,6 +28,7 @@ Ved :: struct {
     current_command:      Maybe(Command),
     commands:             [dynamic]Command,
     filtered_commands:    [dynamic]Command,
+    last_command:         Maybe(LastCommand),
 }
 filter :: proc(d: ^[dynamic]$T, data: $D, fltr: proc(data: D, elem: ^T) -> bool) {
     i := 0
@@ -160,6 +161,15 @@ line_of_position :: proc(lines: []Line, pos: int) -> int {
         return mid + line_of_position(lines[mid:right + 1], pos)
     }
 }
+ved_update_last_command :: proc(ved: ^Ved) {
+    if ved.current_command != nil && !ved.current_command.(Command).repeatable do return
+    if ved.last_command != nil do delete(ved.last_command.(LastCommand).input)
+    ved.last_command = LastCommand {
+        command = ved.current_command.(Command),
+        input = strings.clone(strings.to_string(ved.command_data)),
+        count = ved.count,
+    }
+}
 ved_init :: proc(ved: ^Ved) {
     ved.buffers = make([dynamic]Buffer)
     ved.size = terminal_size()
@@ -250,9 +260,9 @@ main :: proc() {
             set_cursor(int(ved.size.ws_col) - len(cmdstr), int(ved.size.ws_row) - 1)
             fmt.print(cmdstr)
         } else {
-            for i in 0..<int(ved.size.ws_col) - n {
-                fmt.print(' ') 
-            } 
+            for i in 0 ..< int(ved.size.ws_col) - n {
+                fmt.print(' ')
+            }
         }
 
         current_line := buffer.lines[buffer.cursor.row]
@@ -348,6 +358,7 @@ main :: proc() {
                         strings.to_string(ved.command_data),
                     )
                     if state == .CommandFinished {
+                        ved_update_last_command(&ved)
                         ved.count = 0
                         strings.builder_reset(&ved.command_data)
                         ved.current_command = nil
@@ -373,6 +384,13 @@ main :: proc() {
                             ved.count *= 10
                             ved.count += int(k.key_rune) - int('0')
                             reset_count = false
+                        case '.':
+                            if ved.last_command != nil {
+                                last := ved.last_command.(LastCommand) 
+                                ved.count = last.count
+                                last.command.action(&ved, buffer, last.input)
+                                ved.count = 0
+                            }
                         case 'N':
                             if len(ved.search.search_results) > 0 {
                                 next := -1
@@ -478,6 +496,8 @@ main :: proc() {
                                     strings.to_string(ved.command_data),
                                 )
                                 if state == .CommandFinished {
+                                    ved_update_last_command(&ved)
+                                    strings.builder_reset(&ved.command_data)
                                     reset_count = true
                                     ved.current_command = nil
                                 }
@@ -504,6 +524,8 @@ main :: proc() {
                             strings.to_string(ved.command_data),
                         )
                         if state == .CommandFinished {
+                            ved_update_last_command(&ved)
+                            strings.builder_reset(&ved.command_data)
                             ved.count = 0
                             ved.current_command = nil
                         }
