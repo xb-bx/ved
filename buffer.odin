@@ -147,7 +147,6 @@ buf_remove_range :: proc(buf: ^Buffer, lo: int, hi: int) {
     remove_range(&buf.data.buf, lo, hi)
     if len(buf.data.buf) == 0 {
         append(&buf.data.buf, '\n')
-        log.info(buf.lines)        
     }
     split_into_lines(buf.data, &buf.lines)
     

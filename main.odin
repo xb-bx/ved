@@ -175,12 +175,6 @@ ved_init :: proc(ved: ^Ved) {
 
 }
 main :: proc() {
-    log_file, err := os.open("log.txt", os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0o640)
-    if err != os.ERROR_NONE {
-        fmt.println(err)
-        panic("")
-    }
-    context.logger = log.create_file_logger(log_file)
     ved_init(&ved)
     args: []string = os.args[1:]
     if len(args) == 0 {
@@ -275,12 +269,12 @@ main :: proc() {
             col := result.start - line.start + 1
             row := line_index - buffer.scroll_cursor.row + 1
             set_cursor(col, row)
-            if col != term_col || row != term_row do set_inverse_color()
+            fmt.print("\x1b[2m")
             text := buf_slice_to_string(buffer, result.start, result.end)
             for r in text {
                 fmt.print(r)
             }
-            set_normal_color()
+            fmt.print("\x1b[22m")
         }
         set_cursor(term_col, term_row)
         if ved.mode == .Search {
@@ -478,7 +472,6 @@ main :: proc() {
                                 ved.current_command = ved.filtered_commands[0]
                                 clear(&ved.current_command_keys)
                                 clear(&ved.filtered_commands)
-                                log.info(ved.current_command)
                                 state := ved.current_command.(Command).action(
                                     &ved,
                                     buffer,
@@ -505,7 +498,6 @@ main :: proc() {
                         ved.current_command = ved.filtered_commands[0]
                         clear(&ved.current_command_keys)
                         clear(&ved.filtered_commands)
-                        log.info(ved.current_command)
                         state := ved.current_command.(Command).action(
                             &ved,
                             buffer,

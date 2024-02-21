@@ -2,11 +2,26 @@ package ved
 import "core:log"
 import "core:unicode/utf8"
 import "core:strings"
-
+all_indexes_in_string :: proc(str: string, c: rune) -> []int {
+    res := make([dynamic]int)
+    str := str
+    prev_off := 0
+    for {
+        off := strings.index_rune(str, c)
+        if off == -1 do break 
+        //index := pos_of_byte_offset(str, off)
+        append(&res, prev_off + off)
+        prev_off += off + utf8.rune_size(c)
+        str = str[off + utf8.rune_size(c):]
+        if len(str) == 0 do break
+    }
+    return res[:]
+}
 find_next :: proc(ved: ^Ved, buf: ^Buffer, read: string) -> CommandState {
     if len(read) == 0 {
         return .CommandReadChar
     }
+    count := times_todo(ved)
     line := buf.lines[buf.cursor.row]
     line_str := buf_line_as_string(buf, line)
     run, s := utf8.decode_rune_in_string(read)
@@ -16,7 +31,15 @@ find_next :: proc(ved: ^Ved, buf: ^Buffer, read: string) -> CommandState {
     orig := clamp(0, buf.cursor.col, line.len)
     orig_off := utf8.rune_offset(line_str, orig)
     r, orig_size := utf8.decode_rune(line_str[orig:])
-    off := orig_off + strings.index_rune(line_str[orig_off + orig_size:], run)
+
+    indexes := all_indexes_in_string(line_str[orig_off + orig_size:], run)
+    defer delete(indexes)
+    if len(indexes) == 0 {
+        return .CommandFinished
+    }
+    index := clamp(count - 1, 0, len(indexes))
+    
+    off := orig_off + indexes[index]
     off = pos_of_byte_offset(line_str, off) + 1
     buf_cursor_col(buf, off - orig)
     return .CommandFinished
@@ -91,8 +114,11 @@ add_default_commands :: proc(ved: ^Ved) {
             orig_off := utf8.rune_offset(line_str, orig)
             r, orig_size := utf8.decode_rune(line_str[orig:])
             if orig_size <= 0 { return .CommandFinished } 
-            index := strings.index_rune(line_str[orig_off + orig_size:], run)
-            if index <= 0 { return .CommandFinished } 
+            indexes := all_indexes_in_string(line_str[orig_off + orig_size:], run)
+            defer delete(indexes)
+            if len(indexes) == 0 { return .CommandFinished } 
+            index := clamp(times_todo(ved) - 1, 0, len(indexes))
+            index = indexes[index]
             off := orig_off + index
             buf_remove_range(buf, orig_off + line.start, off + orig_size + line.start)
             return .CommandFinished
