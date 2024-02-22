@@ -29,6 +29,7 @@ Ved :: struct {
     commands:             [dynamic]Command,
     filtered_commands:    [dynamic]Command,
     last_command:         Maybe(LastCommand),
+    global_marks:         map[rune]Mark,
 }
 filter :: proc(d: ^[dynamic]$T, data: $D, fltr: proc(data: D, elem: ^T) -> bool) {
     i := 0
@@ -161,21 +162,31 @@ line_of_position :: proc(lines: []Line, pos: int) -> int {
         return mid + line_of_position(lines[mid:right + 1], pos)
     }
 }
+ved_set_buf :: proc(ved: ^Ved, buf: ^Buffer) {
+    for &buffer, i in ved.buffers {
+        if buf == &buffer {
+            ved.current_buf = i
+            break
+        }
+    }
+}
 ved_update_last_command :: proc(ved: ^Ved) {
     if ved.current_command != nil && !ved.current_command.(Command).repeatable do return
     if ved.last_command != nil do delete(ved.last_command.(LastCommand).input)
     ved.last_command = LastCommand {
         command = ved.current_command.(Command),
-        input = strings.clone(strings.to_string(ved.command_data)),
-        count = ved.count,
+        input   = strings.clone(strings.to_string(ved.command_data)),
+        count   = ved.count,
     }
 }
+@(private)
 ved_init :: proc(ved: ^Ved) {
     ved.buffers = make([dynamic]Buffer)
     ved.size = terminal_size()
     ved.search = SearchBuffer {
         search_results = make([dynamic]SearchResult),
     }
+    num := 0x123 + 321 + 0o1231
     strings.builder_init(&ved.current_command_str)
     ved.current_command_keys = make([dynamic]Key)
     ved.filtered_commands = make([dynamic]Command)
@@ -201,7 +212,7 @@ main :: proc() {
     strings.builder_init(&file_sb)
     strings.write_bytes(&file_sb, file)
     delete(file)
-    buf := init_buffer(&file_sb, args[0])
+    buf := buf_init(&file_sb, args[0])
     append(&ved.buffers, buf)
     raw := termios{}
     res := tcgetattr(STDIN_FILENO, &raw)
@@ -255,7 +266,10 @@ main :: proc() {
         n := fmt.printf("%s:%i:%i", buffer.file_name, buffer.cursor.row, buffer.cursor.col)
         current_cmd := strings.to_string(ved.current_command_str)
         if len(current_cmd) != 0 || ved.count != 0 {
-            cmdstr := fmt.aprintf("%i%s", ved.count, current_cmd)
+            cmdstr :=
+                ved.count == 0 \
+                ? strings.clone(current_cmd) \
+                : fmt.aprintf("%i%s", ved.count, current_cmd)
             defer delete(cmdstr)
             set_cursor(int(ved.size.ws_col) - len(cmdstr), int(ved.size.ws_row) - 1)
             fmt.print(cmdstr)
@@ -351,6 +365,7 @@ main :: proc() {
         case .Normal:
             for k in keys_buf {
                 if ved.current_command != nil {
+                    fmt.sbprint(&ved.current_command_str, k.key_rune)
                     fmt.sbprint(&ved.command_data, k.key_rune)
                     state := ved.current_command.(Command).action(
                         &ved,
@@ -359,6 +374,7 @@ main :: proc() {
                     )
                     if state == .CommandFinished {
                         ved_update_last_command(&ved)
+                        strings.builder_reset(&ved.current_command_str)
                         ved.count = 0
                         strings.builder_reset(&ved.command_data)
                         ved.current_command = nil
@@ -386,7 +402,7 @@ main :: proc() {
                             reset_count = false
                         case '.':
                             if ved.last_command != nil {
-                                last := ved.last_command.(LastCommand) 
+                                last := ved.last_command.(LastCommand)
                                 ved.count = last.count
                                 last.command.action(&ved, buffer, last.input)
                                 ved.count = 0
@@ -486,7 +502,6 @@ main :: proc() {
                             } else if len(ved.filtered_commands) == 1 &&
                                len(ved.filtered_commands[0].binding) ==
                                    len(ved.current_command_keys) {
-                                strings.builder_reset(&ved.current_command_str)
                                 ved.current_command = ved.filtered_commands[0]
                                 clear(&ved.current_command_keys)
                                 clear(&ved.filtered_commands)
@@ -497,6 +512,7 @@ main :: proc() {
                                 )
                                 if state == .CommandFinished {
                                     ved_update_last_command(&ved)
+                                    strings.builder_reset(&ved.current_command_str)
                                     strings.builder_reset(&ved.command_data)
                                     reset_count = true
                                     ved.current_command = nil
@@ -514,7 +530,6 @@ main :: proc() {
                         strings.builder_reset(&ved.current_command_str)
                         clear(&ved.current_command_keys)
                     } else if len(ved.filtered_commands) == 1 {
-                        strings.builder_reset(&ved.current_command_str)
                         ved.current_command = ved.filtered_commands[0]
                         clear(&ved.current_command_keys)
                         clear(&ved.filtered_commands)
@@ -525,6 +540,7 @@ main :: proc() {
                         )
                         if state == .CommandFinished {
                             ved_update_last_command(&ved)
+                            strings.builder_reset(&ved.current_command_str)
                             strings.builder_reset(&ved.command_data)
                             ved.count = 0
                             ved.current_command = nil

@@ -1,5 +1,6 @@
 package ved
 import "core:log"
+import "core:unicode"
 import "core:unicode/utf8"
 import "core:strings"
 all_indexes_in_string :: proc(str: string, c: rune) -> []int {
@@ -126,6 +127,55 @@ add_default_commands :: proc(ved: ^Ved) {
             index = indexes[index]
             off := orig_off + index
             buf_remove_range(buf, orig_off + line.start, off + orig_size + line.start)
+            return .CommandFinished
+        },
+        repeatable = true,
+    })
+    append(&ved.commands, Command {
+        binding = binding_from_chars("m"),
+        action = proc(ved: ^Ved, buf: ^Buffer, c: string) -> CommandState {
+            if len(c) < 1 { return .CommandReadChar }
+            run, size := utf8.decode_rune(c)
+            if size < 1 { return .CommandFinished }
+            if !unicode.is_alpha(run) {
+                return .CommandFinished
+            }
+            mark := Mark { cursor = buf.cursor, buf = buf }
+            if unicode.is_upper(run) {
+                ved.global_marks[run] = mark
+            } else {
+                buf.marks[run] = mark 
+            }
+            return .CommandFinished
+        },
+        repeatable = true,
+    })
+    append(&ved.commands, Command {
+        binding = binding_from_chars("'"),
+        action = proc(ved: ^Ved, buf: ^Buffer, c: string) -> CommandState {
+            if len(c) < 1 {return .CommandReadChar}
+            run, size := utf8.decode_rune(c)
+            if size < 1 {return .CommandFinished}
+            if !unicode.is_alpha(run) {
+                return .CommandFinished
+            }
+            if unicode.is_upper(run) {
+                mark, ok := ved.global_marks[run] 
+                if !ok do return .CommandFinished
+                ved_set_buf(ved, mark.buf)
+                buf_cursor_col(mark.buf, -999999)
+                buf_cursor_row(mark.buf, -999999)
+                buf_cursor_row(mark.buf, mark.cursor.row)
+                buf_cursor_col(mark.buf, mark.cursor.col)
+            } else {
+                mark, ok := buf.marks[run] 
+                if !ok do return .CommandFinished
+                buf_cursor_col(buf, -999999)
+                buf_cursor_row(buf, -999999)
+                buf_cursor_row(buf, mark.cursor.row)
+                buf_cursor_col(buf, mark.cursor.col)
+            }
+            
             return .CommandFinished
         },
         repeatable = true,

@@ -2,6 +2,10 @@ package ved
 import "core:log"
 import "core:strings"
 import "core:unicode/utf8"
+Mark :: struct {
+    cursor: Cursor,
+    buf: ^Buffer,
+}
 Line :: struct {
     start:      int,
     end:        int,
@@ -21,14 +25,15 @@ Buffer :: struct {
     scroll_cursor: Cursor,
     width:         int,
     height:        int,
+    marks:         map[rune]Mark,
 }
 buf_as_string :: proc(buffer: ^Buffer) -> string {
     return strings.to_string(buffer.data^)
 }
-init_buffer :: proc(data: ^strings.Builder, file_name: string) -> Buffer {
+buf_init :: proc(data: ^strings.Builder, file_name: string) -> Buffer {
     lines := make([dynamic]Line)
     split_into_lines(data, &lines)
-    return Buffer{data = data, lines = lines, file_name = file_name}
+    return Buffer{data = data, lines = lines, file_name = file_name, marks = make(map[rune]Mark)}
 }
 split_into_lines :: proc(data: ^strings.Builder, lines: ^[dynamic]Line) {
     clear(lines)
